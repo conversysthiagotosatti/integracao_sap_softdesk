@@ -1,0 +1,76 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+pip-wheel-metadata/
+*.manifest
+*.spec
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- Django ---
+*.log
+local_settings.py
+db.sqlite3
+*.sqlite3
+staticfiles/
+media/
+collected_static/
+
+# --- Secrets & ambiente (nunca versionar) ---
+.env
+.env.*
+!.env.example
+
+# --- Testes & cobertura ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# --- Type check / lint caches ---
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+
+# --- IDEs & OS ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- Celery ---
+celerybeat-schedule
+celerybeat.pid
+
+# --- Node (se houver front no repo) ---
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- Misc ---
+*.bak
+*.tmp
+*.orig

@@ -1,0 +1,86 @@
+{
+  "info": {
+    "name": "SAP Integration Service",
+    "description": "Bearer na coleção: variável `token`. Gere token válido: `python manage.py issue_dev_jwt` (pasta sap_integration_service). company_id deve existir em SapClientCredential. `/health/` sem JWT.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8001" },
+    { "key": "token", "value": "COLE_AQUI_O_JWT" }
+  ],
+  "item": [
+    {
+      "name": "Health público (sem JWT — probe)",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/health/"
+      }
+    },
+    {
+      "name": "API — Health (com JWT)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/health/"
+      }
+    },
+    {
+      "name": "SAP — Enviar (sync) purchase_invoice",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"type\": \"purchase_invoice\",\n  \"mode\": \"sync\",\n  \"payload_version\": \"1\",\n  \"payload\": {\n    \"external_id\": \"TEST-POSTMAN-001\",\n    \"CardCode\": \"FORN001\",\n    \"DocumentLines\": [\n      {\n        \"ItemCode\": \"ITEM001\",\n        \"Quantity\": 1,\n        \"UnitPrice\": 10.0\n      }\n    ]\n  }\n}"
+        },
+        "url": "{{base_url}}/api/sap/send"
+      }
+    },
+    {
+      "name": "SAP — Enviar (sync) business_partner",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"type\": \"business_partner\",\n  \"mode\": \"sync\",\n  \"payload\": {\n    \"external_id\": \"BP-POSTMAN-001\",\n    \"CardCode\": \"BP001\",\n    \"CardName\": \"Parceiro Postman\",\n    \"CardType\": \"cSupplier\"\n  }\n}"
+        },
+        "url": "{{base_url}}/api/sap/send"
+      }
+    },
+    {
+      "name": "SAP — Enviar (async) fila",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"type\": \"purchase_invoice\",\n  \"mode\": \"async\",\n  \"payload\": {\n    \"external_id\": \"QUEUE-POSTMAN-001\",\n    \"CardCode\": \"FORN001\"\n  }\n}"
+        },
+        "url": "{{base_url}}/api/sap/send"
+      }
+    },
+    {
+      "name": "SAP — Listar logs",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/sap/logs/"
+      }
+    },
+    {
+      "name": "SAP — Listar fila",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/sap/queue/"
+      }
+    }
+  ]
+}

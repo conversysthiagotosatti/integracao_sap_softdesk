@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sincronização Softdesk</title>
+  <style>
+    :root { --bg: #0f1419; --card: #1a2332; --text: #e7ecf3; --muted: #8b9cb3; --accent: #3d8bfd; --ok: #3fb950; --err: #f85149; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, Segoe UI, Roboto, sans-serif; margin: 0; background: var(--bg); color: var(--text); line-height: 1.45; }
+    header { padding: 1.25rem 1.5rem; border-bottom: 1px solid #2d3a4d; display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; justify-content: space-between; }
+    h1 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+    nav a { color: var(--accent); text-decoration: none; margin-right: 1rem; }
+    nav a:hover { text-decoration: underline; }
+    .user { color: var(--muted); font-size: 0.875rem; }
+    main { padding: 1.25rem 1.5rem 2rem; max-width: 1400px; margin: 0 auto; }
+    .banner-err { background: rgba(248, 81, 73, 0.12); border: 1px solid rgba(248, 81, 73, 0.35); padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; color: var(--text); }
+    .banner-info { background: var(--card); border: 1px solid #2d3a4d; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.875rem; color: var(--muted); }
+    .auto-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1rem; margin-bottom: 1rem; padding: 0.65rem 0.85rem; background: var(--card); border: 1px solid #2d3a4d; border-radius: 8px; font-size: 0.8125rem; }
+    .auto-bar strong { color: var(--text); }
+    .auto-bar .ok { color: var(--ok); }
+    .auto-bar .err { color: var(--err); }
+    button.ghost { padding: 0.35rem 0.65rem; border-radius: 6px; border: 1px solid #2d3a4d; background: #0f1419; color: var(--text); font-size: 0.75rem; cursor: pointer; }
+    button.ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    button.ghost:disabled { opacity: 0.45; cursor: not-allowed; }
+    section h2 { font-size: 1rem; margin: 0 0 0.75rem; color: var(--muted); font-weight: 600; }
+    .table-wrap { overflow-x: auto; background: var(--card); border-radius: 8px; border: 1px solid #2d3a4d; position: relative; }
+    .table-wrap.busy::after { content: ""; position: absolute; inset: 0; background: rgba(15,20,25,0.35); border-radius: 8px; pointer-events: none; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+    th, td { padding: 0.6rem 0.75rem; text-align: left; border-bottom: 1px solid #2d3a4d; vertical-align: top; }
+    th { color: var(--muted); font-weight: 500; white-space: nowrap; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(61, 139, 253, 0.06); }
+    .mono { font-family: ui-monospace, monospace; font-size: 0.75rem; word-break: break-all; }
+    .small { font-size: 0.75rem; color: var(--muted); }
+    button.sync-btn { padding: 0.35rem 0.65rem; border-radius: 6px; border: none; background: var(--accent); color: #fff; font-size: 0.75rem; font-weight: 500; cursor: pointer; }
+    button.sync-btn:hover:not(:disabled) { filter: brightness(1.08); }
+    button.sync-btn:disabled { opacity: 0.45; cursor: not-allowed; background: #3d4a5c; }
+    .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 1000; align-items: center; justify-content: center; padding: 1rem; }
+    .modal-backdrop.open { display: flex; }
+    .modal { background: var(--card); border: 1px solid #2d3a4d; border-radius: 10px; max-width: min(960px, 100%); max-height: 85vh; display: flex; flex-direction: column; width: 100%; }
+    .modal .modal-head { border-bottom: 1px solid #2d3a4d; padding: 0.75rem 1rem; }
+    .modal .modal-head h2 { margin: 0; font-size: 1rem; color: var(--text); }
+    .modal .modal-body-scroll { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 0.75rem; padding: 0 1rem 1rem; }
+    .modal h3.proc-h3 { margin: 0; font-size: 0.8125rem; color: var(--muted); font-weight: 600; }
+    .modal pre { margin: 0; padding: 0.75rem; overflow: auto; font-size: 0.72rem; line-height: 1.4; background: #0f1419; border-radius: 6px; border: 1px solid #2d3a4d; max-height: 38vh; }
+    .modal .modal-actions { padding: 0.75rem 1rem; border-top: 1px solid #2d3a4d; display: flex; justify-content: flex-end; gap: 0.5rem; }
+    .modal .modal-actions button { padding: 0.4rem 0.9rem; border-radius: 6px; border: 1px solid #2d3a4d; background: #0f1419; color: var(--text); cursor: pointer; }
+    .modal .modal-actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  </style>
+</head>
+<body>
+  {% csrf_token %}
+  <header>
+    <h1>Sincronização Softdesk</h1>
+    <nav>
+      <a href="{% url 'integration-dashboard' %}">Painel SAP</a>
+      <a href="{% url 'softdesk-sync-dashboard' %}">Softdesk</a>
+      <a href="/admin/">Admin Django</a>
+    </nav>
+    <span class="user">
+      {% if request.user.is_authenticated %}{{ request.user.username }}{% else %}visitante{% endif %}
+    </span>
+  </header>
+  <main>
+    <p class="banner-info">
+      A tabela é carregada do PostgreSQL Conversys (<span class="mono">helpdesk_chamado</span>). A cada
+      <strong>{{ softdesk_auto_interval_sec }}s</strong> esta página dispara um ciclo que chama o dossiê
+      (<span class="mono">RetornaDossie</span>) e grava no banco para <strong>cada linha</strong> listada
+      (até o limite configurável em <span class="mono">SOFTDESK_SYNC_UI_BATCH_MAX</span>).
+      O botão <strong>Sincronizar</strong> na linha continua disponível para inspeção manual no modal.
+    </p>
+
+    <div class="auto-bar" id="auto-bar" aria-live="polite">
+      <strong>Automático:</strong>
+      <span id="auto-state">iniciando…</span>
+      <button type="button" class="ghost" id="btn-pause">Pausar</button>
+      <span class="small" id="auto-last">Último ciclo: —</span>
+    </div>
+
+    {% if load_error %}
+    <div class="banner-err" id="load-error-banner">
+      <strong>Não foi possível carregar a lista.</strong><br>
+      <span class="mono">{{ load_error }}</span>
+    </div>
+    {% else %}
+    <div class="banner-err" id="load-error-banner" style="display:none;"></div>
+    {% endif %}
+
+    <section>
+      <h2>Chamados</h2>
+      <div class="table-wrap" id="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Código helpdesk API</th>
+              <th>Status</th>
+              <th>Título / assunto</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="chamados-tbody">
+            {% for row in chamados %}
+            <tr>
+              <td class="mono">{{ row.id_display }}</td>
+              <td class="mono">{% if row.codigo %}{{ row.codigo }}{% else %}—{% endif %}</td>
+              <td>{{ row.status_display }}</td>
+              <td>{{ row.titulo }}</td>
+              <td>
+                <button type="button" class="sync-btn" data-codigo="{{ row.codigo }}">Sincronizar</button>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="small">{% if load_error %}—{% else %}Nenhum chamado na lista (filtros + código helpdesk).{% endif %}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div id="json-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="json-modal-title">
+    <div class="modal">
+      <div class="modal-head"><h2 id="json-modal-title">Sincronização — detalhes</h2></div>
+      <div class="modal-body-scroll">
+        <div id="sync-processing-wrap" style="display:none;">
+          <h3 class="proc-h3">Processamento (Conversys / banco)</h3>
+          <pre id="sync-processing-pre" aria-label="Detalhes do processamento"></pre>
+        </div>
+        <h3 class="proc-h3">Resposta bruta da API (dossiê)</h3>
+        <pre id="json-modal-body" aria-label="JSON do dossiê"></pre>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="json-modal-close">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const dossieUrl = "{% url 'softdesk-dossie-fetch' %}";
+      const syncCycleUrl = "{% url 'softdesk-api-sync-cycle' %}";
+      const intervalMs = {{ softdesk_auto_interval_sec|default:60 }} * 1000;
+      const firstDelayMs = {{ softdesk_auto_first_delay_sec|default:3 }} * 1000;
+
+      const modal = document.getElementById("json-modal");
+      const pre = document.getElementById("json-modal-body");
+      const syncWrap = document.getElementById("sync-processing-wrap");
+      const syncPre = document.getElementById("sync-processing-pre");
+      const closeBtn = document.getElementById("json-modal-close");
+      const tbody = document.getElementById("chamados-tbody");
+      const errBanner = document.getElementById("load-error-banner");
+      const tableWrap = document.getElementById("table-wrap");
+      const autoState = document.getElementById("auto-state");
+      const autoLast = document.getElementById("auto-last");
+      const btnPause = document.getElementById("btn-pause");
+
+      function getCookie(name) {
+        const m = document.cookie.match("(^|;)\\s*" + name + "\\s*=\\s*([^;]+)");
+        return m ? decodeURIComponent(m.pop()) : "";
+      }
+      function getCsrf() {
+        const inp = document.querySelector("[name=csrfmiddlewaretoken]");
+        return inp ? inp.value : getCookie("csrftoken");
+      }
+
+      function esc(s) {
+        const d = document.createElement("div");
+        d.textContent = s == null ? "" : String(s);
+        return d.innerHTML;
+      }
+
+      function renderChamados(rows, loadError) {
+        if (loadError) {
+          errBanner.style.display = "block";
+          errBanner.innerHTML = "<strong>Não foi possível carregar a lista.</strong><br><span class=\"mono\">" + esc(loadError) + "</span>";
+        } else {
+          errBanner.style.display = "none";
+          errBanner.innerHTML = "";
+        }
+        if (!tbody) return;
+        if (!rows || !rows.length) {
+          tbody.innerHTML = '<tr><td colspan="5" class="small">' + (loadError ? "—" : "Nenhum chamado na lista (filtros + código helpdesk).") + "</td></tr>";
+          bindSyncButtons();
+          return;
+        }
+        var html = "";
+        for (var i = 0; i < rows.length; i++) {
+          var r = rows[i];
+          var cod = r.codigo != null ? String(r.codigo).trim() : "";
+          html += "<tr><td class=\"mono\">" + esc(r.id_display) + "</td><td class=\"mono\">" + (cod ? esc(cod) : "—") + "</td><td>" + esc(r.status_display) + "</td><td>" + esc(r.titulo) + "</td><td><button type=\"button\" class=\"sync-btn\" data-codigo=\"" + esc(cod) + "\">Sincronizar</button></td></tr>";
+        }
+        tbody.innerHTML = html;
+        bindSyncButtons();
+      }
+
+      function bindSyncButtons() {
+        document.querySelectorAll("button.sync-btn").forEach(function (btn) {
+          if (btn._bound) return;
+          btn._bound = true;
+          btn.addEventListener("click", async function () {
+            var codigo = btn.getAttribute("data-codigo");
+            if (!codigo) return;
+            btn.disabled = true;
+            try {
+              var r = await fetch(dossieUrl + "?codigo=" + encodeURIComponent(codigo), { headers: { Accept: "application/json" } });
+              var data = await r.json();
+              openModalFromData(data);
+            } catch (err) {
+              openModalFromData({ detail: String(err), _conversys_sync: null });
+            } finally {
+              btn.disabled = false;
+            }
+          });
+        });
+      }
+
+      function openModalFromData(data) {
+        var sync = data && typeof data === "object" ? data._conversys_sync : null;
+        if (sync && syncWrap && syncPre) {
+          syncWrap.style.display = "block";
+          syncPre.textContent = JSON.stringify(sync, null, 2);
+        } else if (syncWrap) {
+          syncWrap.style.display = "none";
+          if (syncPre) syncPre.textContent = "";
+        }
+        pre.textContent = JSON.stringify(data, null, 2);
+        modal.classList.add("open");
+      }
+      function closeModal() {
+        modal.classList.remove("open");
+        pre.textContent = "";
+        if (syncPre) syncPre.textContent = "";
+        if (syncWrap) syncWrap.style.display = "none";
+      }
+      closeBtn.addEventListener("click", closeModal);
+      modal.addEventListener("click", function (e) {
+        if (e.target === modal) closeModal();
+      });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && modal.classList.contains("open")) closeModal();
+      });
+
+      var paused = false;
+      btnPause.addEventListener("click", function () {
+        paused = !paused;
+        btnPause.textContent = paused ? "Retomar" : "Pausar";
+        autoState.textContent = paused ? "pausado" : "aguardando próximo ciclo…";
+      });
+
+      async function runSyncCycle() {
+        if (paused) return;
+        autoState.innerHTML = "ciclo em andamento…";
+        if (tableWrap) tableWrap.classList.add("busy");
+        btnPause.disabled = true;
+        try {
+          var r = await fetch(syncCycleUrl, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+              "X-CSRFToken": getCsrf(),
+            },
+            body: "{}",
+          });
+          var j = await r.json();
+          if (j.load_error) {
+            renderChamados(j.chamados || [], j.load_error);
+          } else {
+            renderChamados(j.chamados || [], null);
+          }
+          var c = j.sync_cycle;
+          if (c) {
+            var line = c.ok_count + " ok, " + c.error_count + " erro(s), " + c.processadas + " processada(s)";
+            autoLast.innerHTML = "Último ciclo: <span class=\"" + (c.error_count ? "err" : "ok") + "\">" + esc(line) + "</span> — " + esc(c.finished_at || "");
+          } else if (!j.ok && j.load_error) {
+            autoLast.textContent = "Último ciclo falhou ao carregar lista.";
+          }
+          autoState.textContent = paused ? "pausado" : "aguardando próximo ciclo…";
+        } catch (err) {
+          autoState.textContent = "erro no ciclo (rede/servidor)";
+          autoLast.textContent = "Último ciclo: " + String(err);
+        } finally {
+          if (tableWrap) tableWrap.classList.remove("busy");
+          btnPause.disabled = false;
+        }
+      }
+
+      async function autoLoop() {
+        if (firstDelayMs > 0) {
+          await new Promise(function (res) { setTimeout(res, firstDelayMs); });
+        }
+        while (true) {
+          if (!paused) {
+            await runSyncCycle();
+          }
+          await new Promise(function (res) { setTimeout(res, intervalMs); });
+        }
+      }
+
+      bindSyncButtons();
+      autoState.textContent = "primeiro ciclo em " + Math.round(firstDelayMs / 1000) + "s, depois a cada " + Math.round(intervalMs / 1000) + "s";
+      autoLoop();
+    })();
+  </script>
+</body>
+</html>
