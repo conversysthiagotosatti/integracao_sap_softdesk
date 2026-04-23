@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     "logs.apps.LogsConfig",
     "sap_queue.apps.SapQueueConfig",
     "integrations.apps.IntegrationsConfig",
+    "historico_sap.apps.HistoricoSapConfig",
     "integration_bus.apps.IntegrationBusConfig",
     "softdesk_sync.apps.SoftdeskSyncConfig",
     "api.apps.ApiConfig",
@@ -112,6 +113,9 @@ USE_I18N = True
 USE_TZ = True
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Modelos em ``historico_sap`` usam o banco ``historico_clientes`` (alias ``conversys`` / CONVERSYS_POSTGRES_*).
+DATABASE_ROUTERS = ["historico_sap.router.HistoricoClientesRouter"]
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -216,10 +220,11 @@ SOFTDESK_CHAMADO_UPDATED_AT_FIELD = os.environ.get("SOFTDESK_CHAMADO_UPDATED_AT_
 SOFTDESK_CHAMADO_CODIGO_HELPDESK_FIELD = os.environ.get(
     "SOFTDESK_CHAMADO_CODIGO_HELPDESK_FIELD", "codigo_helpdesk_api"
 ).strip()
-SOFTDESK_CHAMADO_STATUS_FIELD = os.environ.get("SOFTDESK_CHAMADO_STATUS_FIELD", "status").strip()
-# Conversys usa status ``FECHADO``; comparação é case-insensitive.
+# Coluna física em ``helpdesk_chamado`` (Django FK costuma ser ``status_id``).
+SOFTDESK_CHAMADO_STATUS_FIELD = os.environ.get("SOFTDESK_CHAMADO_STATUS_FIELD", "status_id").strip()
+# Conversys usa status ``FECHADO``; comparação é case-insensitive (valor textual se a coluna for texto).
 SOFTDESK_CHAMADO_FECHADO_VALUES = os.environ.get("SOFTDESK_CHAMADO_FECHADO_VALUES", "fechado,FECHADO").strip()
-# Quando ``helpdesk_chamado.status`` for id numérico: ids a excluir da lista (ex.: ``3,5``).
+# Quando o status for id numérico (``status_id``): ids a excluir da lista (ex.: ``3,5``).
 SOFTDESK_CHAMADO_FECHADO_STATUS_IDS = os.environ.get("SOFTDESK_CHAMADO_FECHADO_STATUS_IDS", "").strip()
 SOFTDESK_CHAMADO_TITLE_FIELDS = os.environ.get(
     "SOFTDESK_CHAMADO_TITLE_FIELDS", "titulo,assunto,descricao_resumida,subject"
@@ -263,6 +268,30 @@ CONVERSYS_ATIVIDADE_TABLE = os.environ.get(
 ).strip()
 CONVERSYS_ATENDENTE_TABLE = os.environ.get("CONVERSYS_ATENDENTE_TABLE", "helpdesk_atendente").strip()
 CONVERSYS_USER_TABLE = os.environ.get("CONVERSYS_USER_TABLE", "auth_user").strip()
+# Mapeamento UsuarioSap.raw_json → tabela CONVERSYS_USER_TABLE (upsert em ``integrations.users_conversys_sync``).
+CONVERSYS_USER_COL_USERNAME = os.environ.get("CONVERSYS_USER_COL_USERNAME", "username").strip()
+CONVERSYS_USER_COL_FIRST_NAME = os.environ.get("CONVERSYS_USER_COL_FIRST_NAME", "firstname").strip()
+CONVERSYS_USER_COL_EMAIL = os.environ.get("CONVERSYS_USER_COL_EMAIL", "email_address").strip()
+# Colunas na tabela CONVERSYS_USERPROFILE_TABLE (não na tabela de usuário).
+CONVERSYS_USER_COL_DEPT_SAP = os.environ.get(
+    "CONVERSYS_USER_COL_DEPT_SAP", "codigo_departamento_sap"
+).strip()
+CONVERSYS_USER_COL_SAP_INTERNAL = os.environ.get(
+    "CONVERSYS_USER_COL_SAP_INTERNAL", "codigo_usuario_sap"
+).strip()
+CONVERSYS_USER_PK_COLUMN = os.environ.get("CONVERSYS_USER_PK_COLUMN", "id").strip()
+# Schema PostgreSQL opcional (quando a tabela não está no ``search_path`` / não é ``public``).
+CONVERSYS_USER_TABLE_SCHEMA = os.environ.get("CONVERSYS_USER_TABLE_SCHEMA", "").strip()
+# Perfil: ``codigo_departamento_sap`` / ``codigo_usuario_sap`` (mapeamento Department / InternalKey do SAP).
+CONVERSYS_USERPROFILE_TABLE = os.environ.get("CONVERSYS_USERPROFILE_TABLE", "userprofiles").strip()
+CONVERSYS_USERPROFILE_TABLE_SCHEMA = os.environ.get("CONVERSYS_USERPROFILE_TABLE_SCHEMA", "").strip()
+# Ligação perfil ↔ usuário: ``fk`` = coluna separada (ex. user_id); ``shared_pk`` = mesmo ``id`` nas duas tabelas.
+# ``auto``: usa FK se existir no banco; senão usa PK compartilhada se ``id`` existir em userprofiles.
+CONVERSYS_USERPROFILE_LINK_MODE = os.environ.get("CONVERSYS_USERPROFILE_LINK_MODE", "auto").strip().lower()
+# Coluna FK em userprofiles (só usada em modo ``fk``).
+CONVERSYS_USERPROFILE_USER_FK_COLUMN = os.environ.get(
+    "CONVERSYS_USERPROFILE_USER_FK_COLUMN", "user_id"
+).strip()
 # JSON: listas de chaves no JSON onde procurar a lista (opcional). Padrão cobre atividades, listaAtividades, etc.
 DOSSIE_ATIVIDADE_LIST_KEYS = os.environ.get("DOSSIE_ATIVIDADE_LIST_KEYS", "").strip()
 # JSON: aliases extras por coluna, ex.: {"descricao":["meuCampoTexto"]}

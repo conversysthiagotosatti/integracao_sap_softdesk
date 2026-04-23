@@ -5,11 +5,20 @@ import time
 from datetime import timedelta
 
 from django.conf import settings
+from django.contrib import messages
 from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.shortcuts import redirect
+from django.urls import reverse
 from django.utils import timezone
+from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.decorators.csrf import csrf_protect
 from django.views.generic import TemplateView
 
+from historico_sap.models import DepartamentoSap, UsuarioSap
+from integrations.departments_sync import sync_departments
+from integrations.users_conversys_sync import sync_usuario_sap_to_conversys_users
+from integrations.users_sync import sync_users
 from logs.models import SapIntegrationLog
 from sap_queue.models import SapQueue
 from softdesk_sync.dossie import fetch_dossie
@@ -46,7 +55,111 @@ class IntegrationDashboardView(TemplateView):
                 created_at__gte=since,
             ).count(),
         }
+        if company and "conversys" in settings.DATABASES:
+            ctx["departments_count"] = DepartamentoSap.objects.filter(company_id=company).count()
+            ctx["users_sap_count"] = UsuarioSap.objects.filter(company_id=company).count()
+        else:
+            ctx["departments_count"] = None
+            ctx["users_sap_count"] = None
         return ctx
+
+
+@method_decorator(csrf_protect, name="dispatch")
+class IntegrationDepartmentsSyncView(View):
+    """POST: GET ``Departments`` no Service Layer e persiste em ``departamentos_sap`` (historico_clientes)."""
+
+    http_method_names = ["post"]
+
+    def post(self, request: HttpRequest) -> HttpResponse:
+        company = (request.POST.get("company_id") or "").strip()
+        if not company:
+            messages.error(request, "Informe o company_id (mesmo do JWT / credencial SAP).")
+            return redirect(reverse("integration-dashboard"))
+
+        try:
+            result = sync_departments(company)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("departments_sync failed company_id=%s", company)
+            messages.error(request, f"Falha na sincronização de departamentos: {exc}")
+        else:
+            msg = (
+                f"Departamentos sincronizados para «{result['company_id']}»: "
+                f"{result['inserted']} novo(s), {result['updated']} atualizado(s), "
+                f"{result['skipped']} ignorado(s); {result['total_api']} registro(s) na API."
+            )
+            if result.get("errors_sample"):
+                msg += f" Avisos: {result['errors_sample'][:3]}"
+            messages.success(request, msg)
+
+        return redirect(f"{reverse('integration-dashboard')}?company_id={company}")
+
+
+@method_decorator(csrf_protect, name="dispatch")
+class IntegrationUsersSyncView(View):
+    """POST: GET ``Users`` no Service Layer e persiste JSON bruto em ``usuarios_sap``."""
+
+    http_method_names = ["post"]
+
+    def post(self, request: HttpRequest) -> HttpResponse:
+        company = (request.POST.get("company_id") or "").strip()
+        if not company:
+            messages.error(request, "Informe o company_id (mesmo do JWT / credencial SAP).")
+            return redirect(reverse("integration-dashboard"))
+
+        try:
+            result = sync_users(company)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("users_sync failed company_id=%s", company)
+            messages.error(request, f"Falha na sincronização de usuários SAP: {exc}")
+        else:
+            msg = (
+                f"Usuários SAP sincronizados para «{result['company_id']}»: "
+                f"{result['inserted']} novo(s), {result['updated']} atualizado(s), "
+                f"{result['skipped']} ignorado(s); {result['total_api']} registro(s) na API."
+            )
+            if result.get("errors_sample"):
+                msg += f" Avisos: {result['errors_sample'][:3]}"
+            messages.success(request, msg)
+
+        return redirect(f"{reverse('integration-dashboard')}?company_id={company}")
+
+
+@method_decorator(csrf_protect, name="dispatch")
+class IntegrationUsersConversysLinkView(View):
+    """POST: ``usuarios_sap`` → tabela de usuários do Conversys (inclusão/alteração)."""
+
+    http_method_names = ["post"]
+
+    def post(self, request: HttpRequest) -> HttpResponse:
+        company = (request.POST.get("company_id") or "").strip()
+        if not company:
+            messages.error(request, "Informe o company_id.")
+            return redirect(reverse("integration-dashboard"))
+
+        try:
+            result = sync_usuario_sap_to_conversys_users(company)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("users_conversys_sync failed company_id=%s", company)
+            messages.error(request, f"Falha ao propagar usuários para o Conversys: {exc}")
+        else:
+            link = result.get("userprofile_link", "")
+            link_part = f" [{link}]" if link else ""
+            msg = (
+                f"«{result['user_table']}» + «{result['userprofile_table']}»{link_part}: "
+                f"{result['inserted']} inclusão(ões), {result['updated']} alteração(ões), "
+                f"{result['skipped']} ignorado(s)."
+            )
+            if result.get("errors_sample"):
+                msg += f" Detalhes: {result['errors_sample'][:2]}"
+            messages.success(request, msg)
+
+        return redirect(f"{reverse('integration-dashboard')}?company_id={company}")
 
 
 class SoftdeskSyncDashboardView(TemplateView):

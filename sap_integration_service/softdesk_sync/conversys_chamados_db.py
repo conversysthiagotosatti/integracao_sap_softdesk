@@ -32,11 +32,15 @@ def fetch_chamados_from_conversys_db() -> tuple[list[dict[str, Any]], str | None
     if not _TABLE_RE.match(table):
         return [], "CONVERSYS_CHAMADOS_TABLE inválido (use apenas letras, números e _)."
 
+    status_col = (getattr(settings, "SOFTDESK_CHAMADO_STATUS_FIELD", "status_id") or "status_id").strip()
+    if not _TABLE_RE.match(status_col):
+        return [], "SOFTDESK_CHAMADO_STATUS_FIELD inválido (use apenas letras, números e _)."
+
     limit = max(1, min(int(getattr(settings, "CONVERSYS_CHAMADOS_QUERY_LIMIT", "2000")), 50_000))
 
     conn = connections["conversys"]
     qn = conn.ops.quote_name
-    cols = ("id", "titulo", "status", "codigo_helpdesk_api")
+    cols = ("id", "titulo", status_col, "codigo_helpdesk_api")
     select_sql = ", ".join(qn(c) for c in cols)
     code_col = qn("codigo_helpdesk_api")
     # Painel: só chamados com código helpdesk preenchido (alinhado ao filtro em sync_dashboard).

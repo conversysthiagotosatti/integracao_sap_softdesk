@@ -4,7 +4,7 @@ Após ``RetornaDossie``, relaciona o JSON ao chamado no PostgreSQL do Conversys
 
 O campo ``status`` do JSON é resolvido para o **id** da tabela de configuração de status
 (``CONVERSYS_STATUS_CHAMADO_CONFIG_TABLE``), casando com ``codigo_integracao``, e esse id
-é gravado em ``helpdesk_chamado.status``.
+é gravado na coluna física do chamado (padrão ``status_id`` — ver ``SOFTDESK_CHAMADO_STATUS_FIELD``).
 """
 from __future__ import annotations
 
@@ -440,11 +440,18 @@ def sync_chamado_from_dossie(codigo_helpdesk_api: str, dossie: dict[str, Any]) -
 
     chamado_tbl = (getattr(settings, "CONVERSYS_CHAMADOS_TABLE", "helpdesk_chamado") or "").strip()
     hist_tbl = (getattr(settings, "CONVERSYS_CHAMADO_HISTORICO_TABLE", "helpdesk_chamadohistorico") or "").strip()
+    status_col = (getattr(settings, "SOFTDESK_CHAMADO_STATUS_FIELD", "status_id") or "status_id").strip()
     cfg_tbl = (
         getattr(settings, "CONVERSYS_STATUS_CHAMADO_CONFIG_TABLE", "helpdesk_statuschamadoconfig") or ""
     ).strip()
     if not _TABLE_RE.match(chamado_tbl) or not _TABLE_RE.match(hist_tbl):
         return _base_result(ok=False, steps=steps, detail="Nome de tabela inválido.")
+    if not _TABLE_RE.match(status_col):
+        return _base_result(
+            ok=False,
+            steps=steps,
+            detail="SOFTDESK_CHAMADO_STATUS_FIELD inválido (apenas letras, números e _).",
+        )
     if cfg_tbl and not _TABLE_RE.match(cfg_tbl):
         return _base_result(
             ok=False,
@@ -457,6 +464,7 @@ def sync_chamado_from_dossie(codigo_helpdesk_api: str, dossie: dict[str, Any]) -
         "Tabelas alvo",
         chamado=chamado_tbl,
         historico=hist_tbl,
+        chamado_status_col=status_col,
         status_config=cfg_tbl or "(desligado — sem resolução de status por codigo_integracao)",
     )
 
@@ -521,7 +529,7 @@ def sync_chamado_from_dossie(codigo_helpdesk_api: str, dossie: dict[str, Any]) -
                 )
                 cursor.execute(
                     f"""
-                    SELECT {qn("id")}, {qn("titulo")}, {qn("descricao")}, {qn("status")},
+                    SELECT {qn("id")}, {qn("titulo")}, {qn("descricao")}, {qn(status_col)},
                            {qn("softdesk_id")}, {qn("integrado_softdesk")}, {qn("integracao_status")}
                     FROM {qn(chamado_tbl)}
                     WHERE {qn("codigo_helpdesk_api")} = %s
@@ -548,7 +556,7 @@ def sync_chamado_from_dossie(codigo_helpdesk_api: str, dossie: dict[str, Any]) -
                     "chamado_id": cid,
                     "titulo": (cur_titulo or "")[:120],
                     "descricao_len": len(cur_desc or ""),
-                    "status": cur_status,
+                    status_col: cur_status,
                     "softdesk_id": cur_sid,
                     "integrado_softdesk": cur_integ,
                     "integracao_status": cur_int_stat,
@@ -667,16 +675,16 @@ def sync_chamado_from_dossie(codigo_helpdesk_api: str, dossie: dict[str, Any]) -
                 if novo_status_id is not None:
                     aplicar = novo_status_id != cur_status_norm
                     cmp_field(
-                        "status",
+                        status_col,
                         novo=novo_status_id,
                         atual=cur_status,
                         aplicar=aplicar,
                         motivo_skip=None if aplicar else "igual ao banco",
                     )
                     if aplicar:
-                        updates.append(f"{qn('status')} = %s")
+                        updates.append(f"{qn(status_col)} = %s")
                         params.append(novo_status_id)
-                        changed_fields.append("status")
+                        changed_fields.append(status_col)
                         add_hist(
                             st_old=None if cur_status is None else str(cur_status),
                             st_new=str(novo_status_id),
@@ -684,7 +692,7 @@ def sync_chamado_from_dossie(codigo_helpdesk_api: str, dossie: dict[str, Any]) -
                 elif status_needles:
                     comparisons.append(
                         {
-                            "campo": "status",
+                            "campo": status_col,
                             "valor_dossie_needles": status_needles,
                             "acao": "ignorar",
                             "motivo": (
@@ -696,7 +704,7 @@ def sync_chamado_from_dossie(codigo_helpdesk_api: str, dossie: dict[str, Any]) -
                 else:
                     comparisons.append(
                         {
-                            "campo": "status",
+                            "campo": status_col,
                             "acao": "ignorar",
                             "motivo": "não encontrado no JSON",
                         }

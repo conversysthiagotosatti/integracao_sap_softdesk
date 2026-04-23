@@ -46,6 +46,13 @@
     .mono { font-family: ui-monospace, monospace; font-size: 0.75rem; word-break: break-all; max-width: 280px; }
     .small { font-size: 0.75rem; color: var(--muted); }
     td a { color: var(--accent); }
+    .sap-sync-panel { background: var(--card); border-radius: 8px; border: 1px solid #2d3a4d; padding: 1rem 1.25rem 1.25rem; margin-bottom: 1.5rem; }
+    .sap-sync-panel > h2 { margin: 0 0 0.5rem; font-size: 1.05rem; color: var(--text); }
+    .sap-sync-intro { margin: 0 0 1rem; }
+    .sap-sync-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+    .sap-sync-card { background: #0f1419; border: 1px solid #2d3a4d; border-radius: 8px; padding: 1rem; }
+    .sap-sync-card h3 { margin: 0 0 0.5rem; font-size: 0.9rem; color: var(--muted); font-weight: 600; }
+    .sap-sync-card .filters { margin-bottom: 0; }
   </style>
 </head>
 <body>
@@ -84,7 +91,80 @@
       <div class="stat"><span>Fila pendente</span><strong>{{ stats.queue_pending }}</strong></div>
       <div class="stat"><span>Fila com erro</span><strong>{{ stats.queue_error }}</strong></div>
       <div class="stat"><span>Logs erro (24h)</span><strong>{{ stats.logs_error_24h }}</strong></div>
+      {% if company_filter and departments_count is not None %}
+      <div class="stat"><span>Dep. SAP (tenant)</span><strong>{{ departments_count }}</strong></div>
+      <div class="stat"><span>Usuários SAP (tenant)</span><strong>{{ users_sap_count }}</strong></div>
+      {% endif %}
     </div>
+
+    <section class="sap-sync-panel" aria-labelledby="sap-sync-heading">
+      <h2 id="sap-sync-heading">Integração SAP → historico_clientes</h2>
+      <p class="small sap-sync-intro">
+        Credencial <span class="mono">SapClientCredential</span> (admin) + <span class="mono">company_id</span> abaixo.
+        Dados gravados no PostgreSQL configurado em <span class="mono">CONVERSYS_POSTGRES_*</span>.
+        Migrações: <span class="mono">python manage.py migrate --database=conversys</span>.
+      </p>
+      <div class="sap-sync-grid">
+        <div class="sap-sync-card">
+          <h3>Departamentos</h3>
+          <p class="small" style="margin-top:0">
+            <strong>GET</strong> <code>Departments</code> — tabela <span class="mono">departamentos_sap</span>.
+          </p>
+          <form class="filters" method="post" action="{% url 'integration-sync-departments' %}">
+            {% csrf_token %}
+            <div>
+              <label for="dept_company_id">company_id</label>
+              <input type="text" id="dept_company_id" name="company_id" value="{{ company_filter }}" placeholder="ex.: EMPRESA-01" required autocomplete="off">
+            </div>
+            <button type="submit">Sincronizar departamentos</button>
+          </form>
+          {% if company_filter and departments_count is not None %}
+          <p class="small" style="margin-top:0.75rem;margin-bottom:0;">
+            <strong>{{ departments_count }}</strong> registro(s) —
+            <a href="/admin/historico_sap/departamentosap/?company_id__exact={{ company_filter|urlencode }}">Admin</a>
+          </p>
+          {% endif %}
+        </div>
+        <div class="sap-sync-card">
+          <h3>Usuários (JSON bruto)</h3>
+          <p class="small" style="margin-top:0">
+            <strong>GET</strong> <code>Users</code> (OData) — tabela <span class="mono">usuarios_sap</span>;
+            coluna <span class="mono">raw_json</span>: só
+            <code>InternalKey</code>, <code>UserCode</code>, <code>UserName</code>, <code>eMail</code>,
+            <code>MobilePhoneNumber</code>, <code>Department</code>.
+            Sem duplicar: <span class="mono">(company_id, dedupe_key)</span> (<code>InternalKey</code> ou <code>UserCode</code>).
+          </p>
+          <form class="filters" method="post" action="{% url 'integration-sync-users' %}">
+            {% csrf_token %}
+            <div>
+              <label for="users_company_id">company_id</label>
+              <input type="text" id="users_company_id" name="company_id" value="{{ company_filter }}" placeholder="ex.: EMPRESA-01" required autocomplete="off">
+            </div>
+            <button type="submit">Sincronizar usuários</button>
+          </form>
+          <p class="small" style="margin:0.75rem 0 0.35rem;">
+            <strong>Conversys</strong>: (1) <span class="mono">CONVERSYS_USER_TABLE</span> + <code>id</code>;
+            (2) <span class="mono">CONVERSYS_USERPROFILE_TABLE</span> (SAP). Ligação:
+            <span class="mono">CONVERSYS_USERPROFILE_LINK_MODE</span>=auto|fk|shared_pk
+            (mesmo <code>id</code> em users e perfil, ou coluna FK). Busca por <code>codigo_usuario_sap</code> no perfil ou <code>username</code>.
+          </p>
+          <form class="filters" method="post" action="{% url 'integration-sync-users-conversys' %}" style="margin-bottom:0;">
+            {% csrf_token %}
+            <div>
+              <label for="users_conv_company_id">company_id</label>
+              <input type="text" id="users_conv_company_id" name="company_id" value="{{ company_filter }}" placeholder="ex.: EMPRESA-01" required autocomplete="off">
+            </div>
+            <button type="submit">Propagar p/ tabela de usuários</button>
+          </form>
+          {% if company_filter and users_sap_count is not None %}
+          <p class="small" style="margin-top:0.75rem;margin-bottom:0;">
+            <strong>{{ users_sap_count }}</strong> registro(s) —
+            <a href="/admin/historico_sap/usuariosap/?company_id__exact={{ company_filter|urlencode }}">Admin</a>
+          </p>
+          {% endif %}
+        </div>
+      </div>
+    </section>
 
     <section>
       <h2>Logs de integração (últimos 100)</h2>

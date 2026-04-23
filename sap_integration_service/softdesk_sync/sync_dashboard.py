@@ -25,7 +25,7 @@ def _helpdesk_code_field() -> str:
 
 
 def _status_field() -> str:
-    return getattr(settings, "SOFTDESK_CHAMADO_STATUS_FIELD", "status")
+    return getattr(settings, "SOFTDESK_CHAMADO_STATUS_FIELD", "status_id")
 
 
 def _title_fields() -> tuple[str, ...]:
